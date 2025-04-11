@@ -231,6 +231,11 @@
       width: 1.25rem;
       height: 1.25rem;
     }
+
+    .period-date {
+      color: #6d6d6d;
+      /* font-size: 0.8em; */
+    }
   </style>
 </head>
 <body>
@@ -258,6 +263,12 @@
 
         <label>Bi-Weekly Earn Rate (%)</label>
         <input type="number" id="biWeeklyRate" value="1" step="0.01">
+
+        <label>Start Date</label>
+        <input type="date" id="startDate">
+
+        <label>Number of Months</label>
+        <input type="number" id="numMonths" value="12" min="1">
 
         <button onclick="calculate()">Calculate Returns</button>
       </div>
@@ -312,6 +323,16 @@
         moonIcon.style.display = 'block';
       }
 
+      // Set default start date
+      const startDateInput = document.getElementById('startDate');
+      if (!startDateInput.value) {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        startDateInput.value = `${year}-${month}-${day}`;
+      }
+
       calculate();
     }
 
@@ -323,27 +344,65 @@
 
       const init = parseFloat(document.getElementById('initialAmount').value);
       const rate = parseFloat(document.getElementById('biWeeklyRate').value) / 100;
-      const months = ["January", "February", "March", "April", "May", "June",
-                      "July", "August", "September", "October", "November", "December"];
-      const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-      let balances = [];
-      let date = new Date(2025, 0, 1);
-      const startDate = new Date(date);
+      const startDateInput = document.getElementById('startDate').value;
+      const numMonths = parseInt(document.getElementById('numMonths').value);
       
-      for (let i = 0; i < 12; i++) {
-        date.setDate(date.getDate() + daysInMonth[i]);
-        const biweeks = Math.floor((date - startDate) / (1000 * 60 * 60 * 24 * 14));
-        const amount = init * Math.pow(1 + rate, biweeks);
-        balances.push({ month: months[i], balance: amount.toFixed(2) });
+      if (!startDateInput) {
+        console.error("Start date is missing!");
+        document.getElementById('results').innerHTML = '<p style="color: red;">Please select a valid start date.</p>';
+        return;
       }
 
-      const endAmount = init * Math.pow(1 + rate, 26);
-      const percentageIncrease = ((endAmount - init) / init * 100).toFixed(2);
+      let balances = [];
+      let date = new Date(startDateInput);
+      if (isNaN(date.getTime())) {
+        console.error("Invalid start date provided:", startDateInput);
+        document.getElementById('results').innerHTML = '<p style="color: red;">Invalid start date format. Please use YYYY-MM-DD.</p>';
+        return;
+      }
+      const startDate = new Date(date);
+      let previousBalance = init;
+      
+      balances.push({
+        month: `Start - ${startDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`,
+        balance: init.toFixed(2),
+        earnings: (0).toFixed(2)
+      });
+
+      for (let i = 0; i < numMonths; i++) {
+        let endOfMonthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i + 1, 0);
+        const daysPassed = (endOfMonthDate - startDate) / (1000 * 60 * 60 * 24);
+        const biweeks = Math.floor(daysPassed / 14);
+        const amount = init * Math.pow(1 + rate, biweeks);
+        const monthlyEarnings = amount - previousBalance;
+        
+        const currentMonthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+        const monthYear = currentMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+        
+        balances.push({ 
+          month: `Month ${i + 1} - ${monthYear}`, 
+          balance: amount.toFixed(2),
+          earnings: monthlyEarnings.toFixed(2)
+        });
+        
+        previousBalance = amount;
+      }
+
+      const finalDateForCalc = new Date(startDate.getFullYear(), startDate.getMonth() + numMonths, 0);
+      const totalDaysPassed = (finalDateForCalc - startDate) / (1000 * 60 * 60 * 24);
+      const totalBiweeks = Math.floor(totalDaysPassed / 14);
+      const endAmount = init * Math.pow(1 + rate, totalBiweeks);
+      const totalEarnings = endAmount - init;
+      const percentageIncrease = init === 0 ? 0 : (totalEarnings / init * 100).toFixed(2);
       let html = '<div class="summary">';
       html += `
         <div class="summary-card">
-          <h3>Year-End Amount</h3>
+          <h3>Final Amount (${numMonths} Months)</h3>
           <p>$${endAmount.toFixed(2)}</p>
+        </div>
+        <div class="summary-card">
+          <h3>Total Earnings</h3>
+          <p>$${totalEarnings.toFixed(2)}</p>
         </div>
         <div class="summary-card">
           <h3>Percentage Increase</h3>
@@ -351,30 +410,40 @@
         </div>
       </div>`;
       
-      html += "<table><tr><th>Month</th><th>End Balance</th></tr>";
+      html += "<table><thead><tr><th>Period</th><th>Period Earnings</th><th>End Balance</th></tr></thead><tbody>";
       balances.forEach(b => {
-        html += `<tr><td>${b.month}</td><td>$${b.balance}</td></tr>`;
+        const displayEarnings = parseFloat(b.earnings) < 0.005 && b.month.startsWith('Start') ? (0).toFixed(2) : b.earnings;
+        
+        // Split the period string and wrap the date part
+        const periodParts = b.month.split(' - ');
+        const periodLabel = periodParts[0];
+        const periodDate = periodParts.length > 1 ? ` - <span class="period-date">${periodParts[1]}</span>` : ''; 
+        
+        html += `<tr><td>${periodLabel}${periodDate}</td><td>$${displayEarnings}</td><td>$${b.balance}</td></tr>`;
       });
-      html += "</table>";
+      html += "</tbody></table>";
       document.getElementById('results').innerHTML = html;
 
-      // Get current theme's text color
-      const currentTextColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
-      const currentGridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() + '80'; // Add some transparency
+      const rootStyle = getComputedStyle(document.documentElement);
+      const currentTextColor = rootStyle.getPropertyValue('--text-color').trim();
+      const currentGridColor = rootStyle.getPropertyValue('--border-color').trim() + '80';
+      const primaryColor = rootStyle.getPropertyValue('--primary-color').trim();
+      const primaryColorBg = primaryColor + '1A';
 
       const ctx = document.getElementById('balanceChart').getContext('2d');
-      // Assign the new chart instance to the global variable
       balanceChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: months,
+          labels: balances.map(b => b.month.split(' - ')[0]),
           datasets: [{
             label: 'Account Balance',
             data: balances.map(b => b.balance),
-            backgroundColor: 'rgba(37, 99, 235, 0.1)',
-            borderColor: 'rgb(37, 99, 235)',
+            backgroundColor: primaryColorBg,
+            borderColor: primaryColor,
             borderWidth: 2,
-            tension: 0.4
+            tension: 0.1,
+            pointBackgroundColor: primaryColor,
+            pointRadius: 3,
           }]
         },
         options: {
@@ -382,7 +451,24 @@
           maintainAspectRatio: true,
           plugins: {
             legend: {
-              display: false
+              display: true,
+              labels: {
+                color: currentTextColor
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) {
+                    label += ': ';
+                  }
+                  if (context.parsed.y !== null) {
+                    label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                  }
+                  return label;
+                }
+              }
             }
           },
           scales: {
@@ -408,11 +494,13 @@
                 display: false
               },
               ticks: {
-                color: currentTextColor
+                color: currentTextColor,
+                maxRotation: 45,
+                minRotation: 0
               },
               title: {
                 display: true,
-                text: 'Month',
+                text: 'Period',
                 color: currentTextColor
               }
             }
