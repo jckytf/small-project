@@ -237,6 +237,8 @@
   </div>
 
   <script>
+    let balanceChartInstance = null;
+
     function toggleTheme() {
       const root = document.documentElement;
       const currentTheme = root.getAttribute('data-theme');
@@ -257,6 +259,9 @@
 
       // Store preference
       localStorage.setItem('theme', newTheme);
+
+      // Recalculate and redraw the chart with the new theme colors
+      calculate();
     }
 
     window.onload = function() {
@@ -276,6 +281,11 @@
     }
 
     function calculate() {
+      // Destroy existing chart instance if it exists
+      if (balanceChartInstance) {
+        balanceChartInstance.destroy();
+      }
+
       const init = parseFloat(document.getElementById('initialAmount').value);
       const rate = parseFloat(document.getElementById('biWeeklyRate').value) / 100;
       const months = ["January", "February", "March", "April", "May", "June",
@@ -313,8 +323,13 @@
       html += "</table>";
       document.getElementById('results').innerHTML = html;
 
+      // Get current theme's text color
+      const currentTextColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
+      const currentGridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() + '80'; // Add some transparency
+
       const ctx = document.getElementById('balanceChart').getContext('2d');
-      new Chart(ctx, {
+      // Assign the new chart instance to the global variable
+      balanceChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
           labels: months,
@@ -339,15 +354,18 @@
             y: {
               beginAtZero: false,
               grid: {
-                color: document.documentElement.getAttribute('data-theme') === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.1)' 
-                  : 'rgba(0, 0, 0, 0.05)'
+                color: currentGridColor
               },
               ticks: {
                 callback: function(value) {
                   return '$' + value.toLocaleString();
                 },
-                color: getComputedStyle(document.documentElement).getPropertyValue('--text-color')
+                color: currentTextColor
+              },
+              title: {
+                display: true,
+                text: 'Balance ($)',
+                color: currentTextColor
               }
             },
             x: {
@@ -355,7 +373,12 @@
                 display: false
               },
               ticks: {
-                color: getComputedStyle(document.documentElement).getPropertyValue('--text-color')
+                color: currentTextColor
+              },
+              title: {
+                display: true,
+                text: 'Month',
+                color: currentTextColor
               }
             }
           }
